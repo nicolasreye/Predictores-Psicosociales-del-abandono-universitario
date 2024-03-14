@@ -1,0 +1,147 @@
+-------------------------------------------------------------------- META-ANALISIS DE CORRELACIONES------------------------------------------------------------------
+
+# INSTALACIÓN PAQUETES
+install.packages(c("robumeta", "metafor", "dplyr"))
+install.packages("tidyverse")
+
+#librerias
+
+library(metafor)
+install.packages("tidyverse")
+library(tidyverse)
+library("robumeta")
+library(metaviz)
+
+# Carga de archivo de datos (ejemplo para variables autoeficaci y abandono)
+
+autoesficacia_desercion <- read.csv2("~/R/AEF_DES.csv")
+
+# Orgacionzación de los datos
+
+autoesficacia_desercion <- autoesficacia_desercion [ , c(3,1,2,4,5,6,7,8,9,10)]
+autoesficacia_desercion
+View(autoesficacia_desercion)
+
+# Transformacion de coeficientes a puntajes a Z de Fisher
+
+autoesficacia_desercion <- escalc(measure = "ZCOR",
+                  ri = ri,
+                  ni = ni,
+                  data =  autoesficacia_desercion,
+                  slab = paste(autores, ano, sep = ", "))
+
+# META-ANALISIS DE CORRELACIÓN
+
+res_AEF_DES <- rma(yi = yi, vi = vi, data = autoesficacia_desercion)
+res_AEF_DES
+
+#  DIAGNÓSTICO DE INFLUENCIA
+
+inf_AEF_DES <- influence(res_AEF_DES)
+print(inf_AEF_DES)
+plot(inf_AEF_DES)
+baujat(res_AEF_DES)
+
+# DIAGNOSTICO DE SESGO DE PUBLCACIÓN CON REGRESEIÓN DE EGGER
+
+regtest(res_AEF_DES)
+
+# ANÁLISIS DE MODERADORES PARA VARIABLES CATEGÓRICAS
+
+  # Análisis de variable tipo de estudiante
+res_moder_TIPO_EST_AEF_DES <- rma(yi = yi, vi = vi,
+                 mods = ~factor(autoesficacia_desercion$Tipo.estudiante)-1,
+                 data = autoesficacia_desercion)
+res_moder_TIPO_EST_AEF_DES
+table(autoesficacia_desercion$Tipo.estudiante)
+
+  # Análisis de variable edad del estudiante
+res_moder_EDAD_MUESTRA_AEF_DES <- rma(yi = yi, vi = vi,
+                          mods = ~factor(autoesficacia_desercion$Edad.Media.de.la.muestra.1)-1,
+                          data = autoesficacia_desercion)
+res_moder_EDAD_MUESTRA_AEF_DES
+table(autoesficacia_desercion$Edad.Media.de.la.muestra.1)
+
+  # Análisis de variable sex del estudiante
+res_moder_SEXO_MUESTRA_AEF_DES <- rma(yi = yi, vi = vi,
+                              mods = ~factor(autoesficacia_desercion$Sexo.de.la.muestra)-1,
+                              data = autoesficacia_desercion)
+res_moder_SEXO_MUESTRA_AEF_DES
+table(autoesficacia_desercion$Sexo.de.la.muestra)
+
+# ANÁLISIS DE MODERADORES PARA VARIABLES CONTÍNUAS.
+
+res_moder_EV_CALIDAD_AEF_DES <- rma(yi = yi, vi = vi,
+                              mods = ~autoesficacia_desercion$Prom.Calidad,
+                              data = autoesficacia_desercion)
+res_moder_EV_CALIDAD_AEF_DES
+
+-------------------------------------------------------------------- MODELO DE ECUACIONES ESTRUCTURALES EN DOS ETAPAS TSSEM------------------------------------------------------------------
+
+# INSTALACIÓN DE PAQUETES
+
+library("metaSEM")
+library(lavaan)
+library(OpenMx)
+library("semPlot")
+
+# LECTURA DE ARCHIVO DE DATOS
+meta_sem_ej <- read.csv2("~/R/meta_sem_BDD.csv", header=TRUE)
+meta_sem_ej
+
+# CREACIÓN DE MATRICES DE CORRELACION
+nvar <- 3
+varnames <- c("AEF","DS","DES")
+labels <- list(varnames,varnames)
+
+cordat <- list()
+
+for (i in 1:nrow(meta_sem_ej))
+    { cordat[[i]] <- vec2symMat(as.matrix(meta_sem_ej[i,3:5]), 
+    diag = FALSE)
+    dimnames(cordat[[i]]) <- labels
+}
+
+for (i in 1:length(cordat)){
+        for (j in 1:nrow(cordat[[i]])){
+          if (sum(is.na(cordat[[i]][j,]))==nvar-1)
+          {cordat[[i]][j,j] <- NA}
+}}
+
+cordat[[141]]
+for (i in 1:length(cordat)){
+for (j in 1:nrow(cordat[[i]])){
+        for (k in 1:nvar){
+          if (is.na(cordat[[i]][j,k])==TRUE
+              &is.na(cordat[[i]][j,j])!=TRUE
+              &is.na(cordat[[i]][k,k])!=TRUE){
+            
+if(sum(is.na(cordat[[i]])[j,])>sum(is.na(cordat[[i]])[k,]))
+  {cordat[[i]][k,k] <- NA}
+if(sum(is.na(cordat[[i]])[j,])<=sum(is.na(cordat[[i]])[k,]))
+  {cordat[[i]][j,j] <- NA}
+}}}}
+
+# PASO 1 ETAPA 1 DEL MODELO
+stage1random <- tssem1(Cov=cordat, n=meta_sem_ej$sample, method="REM",
+                       RE.type="Diag")
+
+summary(stage1random)
+
+# PASO 1A Especificacion del modelo
+
+model2 <- 'DES ~ a*AEF
+          #mediadores
+           DS ~ b*AEF
+           DES ~ c*DS
+           # efectos indirectos
+           bc := b*c
+           totalbc := a + (b*c)'
+plot(model2)
+
+RAM <- lavaan2RAM(model2)
+
+# PASO 2 CALCULO DEL MODELO DE EFECTOS INDIRECTOS
+stage2 <- tssem2(stage1random, Amatrix=A, Smatrix=S,
+                 diag.constraints=TRUE, intervals="LB", mx.algebras = RAM$mxalgebras)
+summary(stage2)
