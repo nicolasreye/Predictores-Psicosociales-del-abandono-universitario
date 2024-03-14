@@ -12,7 +12,7 @@ library(tidyverse)
 library("robumeta")
 library(metaviz)
 
-# Carga de archivo de datos (ejemplo para variables autoeficaci y abandono)
+# Carga de archivo de datos (ejemplo para variables autoeficacia y abandono)
 
 autoesficacia_desercion <- read.csv2("~/R/AEF_DES.csv")
 
